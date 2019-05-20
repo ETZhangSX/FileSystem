@@ -71,6 +71,7 @@ const char *syscmd[] = {
 const int cmdNumber = 13;
 
 unsigned short currentDir; //current inodenum
+
 FILE *fp;
 const unsigned short superBlockSize = sizeof(superBlock);
 const unsigned short blockBitmapSize = sizeof(blockBitmap);
@@ -337,11 +338,17 @@ void cd(char *name) {
     int fileInodeNum;
     PtrInode fileInode = (PtrInode)malloc(inodeSize);
     if(strcmp(name, "..") != 0) {
-        fileInodeNum = findInodeNum(name, 1);
-        if(fileInodeNum == -1)
-            printf("This is no %s directory...\n", name);
+        if (strcmp(name, "/") != 0) {
+            fileInodeNum = findInodeNum(name, 1);
+            if(fileInodeNum == -1)
+                printf("This is no %s directory...\n", name);
+            else {
+                currentDir = fileInodeNum;
+            }
+        }
         else {
-            currentDir = fileInodeNum;
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize, SEEK_SET);
+            currentDir = 0;
         }
     }
     else {
@@ -359,7 +366,10 @@ void cd_l(char *name) {
     char *ptr_char;
     char *pathname;
     // argc = 0;
-
+    if (*ptr_char == '/') {
+        cd("/");
+        ptr_char++;
+    }
     for(i = 0, ptr_char = name; *ptr_char != '\0'; ptr_char++) {
         if(*ptr_char != ' ') {
             while(*ptr_char != '/' && (*ptr_char != '\0'))
