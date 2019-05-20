@@ -363,14 +363,15 @@ void cd(char *name) {
 void cd_l(char *name) {
     int  i;
     char temp[20];
-    char *ptr_char;
+    char *ptr_char = name;
     char *pathname;
     // argc = 0;
     if (*ptr_char == '/') {
         cd("/");
         ptr_char++;
     }
-    for(i = 0, ptr_char = name; *ptr_char != '\0'; ptr_char++) {
+
+    for(i = 0; *ptr_char != '\0'; ptr_char++) {
         if(*ptr_char != ' ') {
             while(*ptr_char != '/' && (*ptr_char != '\0'))
                 temp[i++] = *ptr_char++;
