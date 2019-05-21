@@ -81,6 +81,7 @@ const unsigned short fcbSize = sizeof(Fcb);
 char *argv[5];
 int argc;
 
+void welcomeMsg();
 void createFileSyetem();
 void openFileSystem();
 void createFile(char *name, int flag);
@@ -106,10 +107,26 @@ void command(void);
 
 int main(int argc, char **argv){
     signal(SIGINT, stopHandle);
+    welcomeMsg();
     login();
     openFileSystem();
     command();
     return 0;
+}
+
+void welcomeMsg() {
+	FILE* fq;
+    char c;
+	if ((fq = fopen("welcome.txt", "rb+")) == NULL) {
+        printf("open file %s error...\n", "welcome.txt");
+        exit(1);
+    }
+    fseek(fq, 0, SEEK_SET);
+	while((c = fgetc(fq)) != EOF) {
+                putchar(c);
+    }
+    printf("\n");
+    fclose(fq);
 }
 
 
