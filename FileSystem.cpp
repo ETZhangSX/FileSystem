@@ -13,7 +13,7 @@
 #include <string>
 
 #define BLOCKSIZE 1024
-#define BLOCKNUM  512
+#define BLOCKNUM  16384
 #define INODENUM  256
 #define FILENAME "file.dat"
 
@@ -237,6 +237,7 @@ void createFile(char *name, int flag) {
     //update superBlock and bitmap
     superBlock.blockFree -= 1;
     superBlock.inodeFree -= 1;
+
     blockBitmap[nowBlockNum] = 1;
     inodeBitmap[nowInodeNUm] = 1;
     
@@ -365,9 +366,10 @@ void cd_l(char *name) {
     char temp[20];
     char *ptr_char = name;
     char *pathname;
+    char root_[] = "/";
     // argc = 0;
     if (*ptr_char == '/') {
-        cd("/");
+        cd(root_);
         ptr_char++;
     }
 
@@ -469,49 +471,103 @@ void deleteFile(char *name) {
     PtrInode fileInode = (PtrInode)malloc(inodeSize);
     PtrInode parentInode = (PtrInode)malloc(inodeSize);
     Fcb fcb[20];
+    Fcb fcb_to_rm[20];
     if(((fileInodeNum = findInodeNum(name, 0)) == -1)&&((fileInodeNum = findInodeNum(name, 1)) == -1)) {
         printf("This is no %s...\n", name);
     }
     else {
         if((fileInodeNum = findInodeNum(name, 0)) == -1) {
             fileInodeNum = findInodeNum(name, 1);
-        }
-        
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInodeNum * inodeSize, SEEK_SET);
-        fread(fileInode, inodeSize, 1, fp);
-        
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent * inodeSize, SEEK_SET);
-        fread(parentInode, inodeSize, 1, fp);
-        
-        
-        //update parent info
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
-        for(i = 0; i < parentInode->length; i++) {
-            fread(&fcb[i], fcbSize, 1, fp);
-            //fcb[i]=tmp;
-        }
-        
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
-        for(i = 0; i < BLOCKSIZE; i++)
-            fputc(0, fp);
-        
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
-        for(i = 0; i < parentInode->length; i++) {
-            if((strcmp(fcb[i].fileName, name)) != 0) {
-                fwrite(&fcb[i], fcbSize, 1, fp);
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInodeNum * inodeSize, SEEK_SET);
+            fread(fileInode, inodeSize, 1, fp);
+
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent*inodeSize, SEEK_SET);
+            fread(parentInode, inodeSize, 1, fp);
+
+
+            //update parent info
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum*BLOCKSIZE, SEEK_SET);
+            for (i = 0; i < parentInode->length; i++) {
+                fread(&fcb[i], fcbSize, 1, fp);
             }
+
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum*BLOCKSIZE, SEEK_SET);
+            for (i = 0; i < BLOCKSIZE * parentInode->length; i++)
+                fputc(0, fp);
+
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum*BLOCKSIZE, SEEK_SET);
+            for (i = 0; i < parentInode->length; i++) {
+                if ((strcmp(fcb[i].fileName, name)) != 0) {
+                    fwrite(&fcb[i], fcbSize, 1, fp);
+                }
+            }
+
+            parentInode->length -= 1;
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent*inodeSize, SEEK_SET);
+            fwrite(parentInode, inodeSize, 1, fp);
+
+            //update bitmap
+            inodeBitmap[fileInode->inum] = 0;
+            for (int j = 0; j < fileInode->length; j++) {
+                blockBitmap[fileInode->blockNum + j] = 0;
+            }
+
+            blockBitmap[fileInode->blockNum] = 0;
+
+            //update superblock
+            superBlock.blockFree += fileInode->length;
+            superBlock.inodeFree += 1;
+        }
+        else {
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInodeNum * inodeSize, SEEK_SET);
+            fread(fileInode, inodeSize, 1, fp);
+
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + fileInode->blockNum * BLOCKSIZE, SEEK_SET);
+            for (i = 0; i < fileInode->length; i++) {
+                fread(&fcb_to_rm[i], fcbSize, 1, fp);
+            }
+
+            int temp = currentDir;
+            currentDir = fileInodeNum;
+            for (int j = 0; j < fileInode->length; j++) {
+                deleteFile(fcb_to_rm[j].fileName);
+            }
+            currentDir = temp;
+        
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent * inodeSize, SEEK_SET);
+            fread(parentInode, inodeSize, 1, fp);
+        
+            //update parent info
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
+            for(i = 0; i < parentInode->length; i++) {
+                fread(&fcb[i], fcbSize, 1, fp);
+            //fcb[i]=tmp;
+            }
+        
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
+            for(i = 0; i < BLOCKSIZE; i++)
+                fputc(0, fp);
+        
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + INODENUM * inodeSize + parentInode->blockNum * BLOCKSIZE, SEEK_SET);
+            for(i = 0; i < parentInode->length; i++) {
+                if((strcmp(fcb[i].fileName, name)) != 0) {
+                   fwrite(&fcb[i], fcbSize, 1, fp);
+                }
+            }
+        
+            parentInode->length -= 1;
+            fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent * inodeSize, SEEK_SET);
+            fwrite(parentInode, inodeSize, 1, fp);
+            //update bitmap
+            inodeBitmap[fileInodeNum] = 0;
+            blockBitmap[fileInode->blockNum] = 0;
+        
+            //update superblock
+            superBlock.blockFree += 1;
+            superBlock.inodeFree += 1;
         }
         
-        parentInode->length -= 1;
-        fseek(fp, superBlockSize + blockBitmapSize + inodeBitmapSize + fileInode->iparent * inodeSize, SEEK_SET);
-        fwrite(parentInode, inodeSize, 1, fp);
-        //update bitmap
-        inodeBitmap[fileInodeNum] = 0;
-        blockBitmap[fileInode->blockNum] = 0;
         
-        //update superblock
-        superBlock.blockFree += 1;
-        superBlock.inodeFree += 1;
     }
     
     free(fileInode);
@@ -523,12 +579,14 @@ char* copy_help(char* name) {
     char *ptr_char = name;
 
     while (*ptr_char != '\0') ptr_char++;
-    while (*ptr_char != '/') ptr_char--;
+    while (*ptr_char != '/' && ptr_char != name) ptr_char--;
 
-    *ptr_char = '\0';
-    ptr_char++;
-
-    cd_l(name);
+    if (ptr_char != name) {
+        *ptr_char = '\0';
+        ptr_char++;
+        cd_l(name);
+    }
+    
     return ptr_char;
 }
 
